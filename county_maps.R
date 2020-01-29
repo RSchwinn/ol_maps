@@ -24,13 +24,19 @@ fix_county = function(x){
     input = paste0(full$state.name, ",",county) %>%
         tolower
     x = filter(county.fips, polyname == input)$fips
+    x
 }
+
+df = df %>%
+    filter(!is.na(County.1)) 
 
 df$fips = NA
 
 for(i in 1:nrow(df)){
     df$fips[i] = fix_county(df$County.1[i])
 }
+
+
 
 map_df = df %>%
     mutate(search_term = as.character(search_term)) %>%
@@ -40,9 +46,6 @@ map_df = df %>%
     rename(region = fips)
     
     library("choroplethr")
-
-
-
 
 county_choropleth(map_df %>%
                    filter(region != "",
