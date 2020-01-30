@@ -1,9 +1,10 @@
 library(tidyverse)
-library(maps)
+library(acs)
 
 full_df = readRDS("complete_Yelp_dataset.RDS")
 
 df = full_df %>%
+    filter(!is.na(County.1)) %>%
     select(search_term,
            Zip.Code,
            County.1,
@@ -11,96 +12,104 @@ df = full_df %>%
            Price.Level
            )
 
-state_names = data.frame(state.abb, state.name)
+df$State = gsub("(.*), (.*)", "\\2", df$County.1)
+df$County.Name = gsub("(.*), (.*)", "\\1", df$County.1)
 
-x = "Ada County, ID"
+df_merged = merge(df, fips.county, by = c("State", "County.Name"))
 
-fix_county = function(x){
-    county = gsub("(.*), (.*)", "\\1", x)
-    county = gsub(" County", "", county) 
-    s_abb = gsub("(.*), (.*)", "\\2", x)
-    s_abb = substr(s_abb, 1, 2)
-    full = filter(state_names, state.abb == s_abb)
-    input = paste0(full$state.name, ",",county) %>%
-        tolower
-    x = filter(county.fips, polyname == input)$fips
-    x
-}
+library(stringr)
+df_merged$fips = paste0(str_pad(df_merged$State.ANSI, 2, pad = "0"),
+                        str_pad(df_merged$County.ANSI, 3, pad = "0"))
 
-df = df %>%
-    filter(!is.na(County.1)) 
+saveRDS(df_merged, "map_data.RDS")
 
-df$fips = NA
+df_merged = readRDS( "map_data.RDS")
 
-for(i in 1:nrow(df)){
-    df$fips[i] = fix_county(df$County.1[i])
-}
-
-
-
-map_df = df %>%
+map_df = df_merged %>%
     mutate(search_term = as.character(search_term)) %>%
     filter(!is.na(fips)) %>%
     group_by(search_term, fips) %>%
     summarise(value = mean(Average.Rating))  %>%
-    rename(region = fips)
-    
-    library("choroplethr")
+    rename(region = fips) %>%
+    mutate(region = as.character(region)) %>%
+    filter(region != "",
+           !is.na(region),
+           !is.na(value)) %>%
+    mutate(region = as.numeric(region)) 
 
-county_choropleth(map_df %>%
-                   filter(region != "",
-                          search_term == "hair cut",
-                          !is.na(value))
-)
+map_df2 = df_merged %>%
+    mutate(search_term = as.character(search_term)) %>%
+    filter(!is.na(fips)) %>%
+    group_by(fips) %>%
+    summarise(value = mean(Average.Rating))  %>%
+    rename(region = fips) %>%
+    mutate(region = as.character(region)) %>%
+    filter(region != "",
+           !is.na(region),
+           !is.na(value)) %>%
+    mutate(region = as.numeric(region)) 
 
-county.names
+library(choroplethr)
 
-library(maps)
 
-county.fips
-map_df$region[2]
-
-x = "Ada County, ID"
-
-fix_county = function(x){
-        x = gsub("(.*), (.*)", "\\2, \\1", x)
-        x = gsub(" County", "", x) 
-        x = tolower(x)
-        x
+figures = list()
+i = 1
+for(occupation in unique(df$search_term)){
+    temp = county_choropleth(filter(map_df,
+                                       search_term == occupation)) +
+        scale_fill_brewer(
+            na.value="grey") +
+        ggtitle(paste0("Average Yelp Ratings: ", tools::toTitleCase(occupation)))
+    temp$layers[[1]]$aes_params$size = 0.01
+    figures[[i]] = temp
+    i = i+1
 }
 
-fix_county(map_df$region)
+fig1 = county_choropleth(filter(map_df2)) +
+    scale_fill_brewer(
+        na.value="grey") +
+    ggtitle("Average Yelp Ratings: All Occupations")
+fig1$layers[[1]]$aes_params$size = 0.01
 
- substr()
+library(gridExtra)
 
-gsub("(.*)c","\\1","abcd")
+grid.arrange(fig1,
+             figures[[1]],
+             figures[[2]],
+             figures[[3]],
+             figures[[4]],
+             figures[[5]],
+             figures[[6]],
+             figures[[7]],
+             figures[[8]],
+             ncol = 3)
 
 
-# 
-# df = inner_join(cleaned_df,
-#                 df_1[, c("state",
-#                          "cost_of_licensing", "search_term")],
-#                 by = c("state", "search_term"))
-# 
-# it = lm("Average.Rating ~ cost_of_licensing + search_term", df)
-# 
-# summary(it)
+
+    # scale_fill_continuous(low="green", 
+    #                       high="blue", 
+    #                       # middle = "white",
+    #                       guide="colorbar",
+    #                       na.value="grey")
+
+
+
 
 # install.packages("devtools")
 # library(devtools)
 # install_github('arilamstein/choroplethrZip')
 
-
-map_df = df %>%
-    group_by(search_term, Zip.Code) %>%
-    summarise(value = mean(Average.Rating)) %>%
-    mutate(search_term = as.character(search_term)) %>%
-    rename(region = Zip.Code) %>%
-    
-    library("choroplethrZip")
-
-zip_choropleth(map_df %>%
-                   filter(region != "",
-                          search_term == "cosmetologist")
-)
-
+# 
+# map_df = df %>%
+#     group_by(search_term, Zip.Code) %>%
+#     summarise(value = mean(Average.Rating)) %>%
+#     mutate(search_term = as.character(search_term)) %>%
+#     rename(region = Zip.Code) %>%
+#     
+#     library("choroplethrZip")
+# 
+# zip_choropleth(map_df %>%
+#                    filter(region != "",
+#                           search_term == "cosmetologist")
+# )
+# 
